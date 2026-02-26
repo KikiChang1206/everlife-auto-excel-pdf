@@ -41,3 +41,53 @@ def process_invoice(file_bytes):
             
             # B, C 欄 (Description) 靠左
             if cell.column_letter in ['B', 'C']:
+                cell.alignment = Alignment(horizontal='left', vertical='center', wrapText=True)
+            # H, I 欄 (金額) 靠右
+            if cell.column_letter in ['H', 'I']:
+                cell.alignment = Alignment(horizontal='right', vertical='center')
+
+    # --- 4. 自動調整欄寬 ---
+    for col in ws.columns:
+        max_length = 0
+        column_letter = get_column_letter(col[0].column)
+        
+        # 掃描資料區來決定寬度
+        for cell in col[:grid_end_row + 1]:
+            try:
+                if cell.value:
+                    val_str = str(cell.value)
+                    length = sum(2 if ord(char) > 127 else 1 for char in val_str)
+                    if length > max_length:
+                        max_length = length
+            except: pass
+        
+        if column_letter in ['B', 'C']:
+            ws.column_dimensions[column_letter].width = min(max_length + 5, 45)
+        elif column_letter == 'A': # 品項編號欄位不需要太寬
+            ws.column_dimensions[column_letter].width = max(max_length, 5)
+        else:
+            ws.column_dimensions[column_letter].width = max_length + 3
+
+    # 輸出檔案
+    output = io.BytesIO()
+    wb.save(output)
+    return output.getvalue()
+
+# Streamlit 介面
+st.title("🚢 報單格式精確優化")
+st.write("格線現在會精確結束在 I 欄總金額的位置。")
+
+uploaded_file = st.file_uploader("請上傳原始報單 Excel", type=["xlsx"])
+
+if uploaded_file:
+    try:
+        processed_data = process_invoice(uploaded_file.read())
+        st.success("✅ 處理完成！")
+        st.download_button(
+            label="📥 下載最終報單",
+            data=processed_data,
+            file_name=f"Final_{uploaded_file.name}",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+    except Exception as e:
+        st.error(f"錯誤：{e}")
