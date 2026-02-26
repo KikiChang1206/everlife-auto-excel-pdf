@@ -23,11 +23,24 @@ def process_invoice(file_bytes):
         ws['A3'] = 'TEL : (02)29531399'
         ws['A4'] = 'Adress : 236新北市土城區永豐路96巷8號'
 
-    # --- 2. 合併 E7~I7 並格式化 ---
-    # 執行合併
-    ws.merge_cells('E7:I7')
-    # 設定格式：靠左、置中、自動換行
-    ws['E7'].alignment = Alignment(horizontal='left', vertical='center', wrapText=True)
+    # --- 2. 安全地合併 E7~I7 ---
+    # 為了避免 Excel 報錯，我們先清除 F7:I7 的內容，並確保沒有舊的合併衝突
+    try:
+        # 如果原本有合併，先解除 (避免重複合併衝突)
+        for merged_range in list(ws.merged_cells.ranges):
+            if 'E7' in merged_range or 'F7' in merged_range:
+                ws.unmerge_cells(str(merged_range))
+        
+        # 清除 F7 到 I7 的隱藏資料，確保只留 E7
+        for col_idx in range(6, 10): # F 到 I
+            ws.cell(row=7, column=col_idx).value = None
+            
+        # 執行合併
+        ws.merge_cells('E7:I7')
+        # 設定格式：靠左、垂直置中、自動換行
+        ws['E7'].alignment = Alignment(horizontal='left', vertical='center', wrapText=True)
+    except Exception as e:
+        st.warning(f"合併 E7:I7 時發生小提示：{e}")
 
     # --- 3. 判定格線結束位置 ---
     grid_end_row = 12
@@ -36,7 +49,7 @@ def process_invoice(file_bytes):
             grid_end_row = r
             break
 
-    # --- 4. 畫格線與對齊設定 (從第 12 列到總金額列) ---
+    # --- 4. 畫格線與對齊設定 ---
     for row in ws.iter_rows(min_row=12, max_row=grid_end_row, min_col=1, max_col=9):
         for cell in row:
             cell.border = thin_border
@@ -45,13 +58,13 @@ def process_invoice(file_bytes):
             if cell.row == 12:
                 cell.alignment = Alignment(horizontal='center', vertical='center', wrapText=True)
             else:
-                # 預設內容置中
+                # 預設內容垂直置中
                 cell.alignment = Alignment(horizontal='center', vertical='center', wrapText=True)
                 
                 # B, C 欄 (Description) 靠左
                 if cell.column_letter in ['B', 'C']:
                     cell.alignment = Alignment(horizontal='left', vertical='center', wrapText=True)
-                # H, I 欄 (金額相關內容) 靠右
+                # H, I 欄 (金額) 靠右
                 if cell.column_letter in ['H', 'I']:
                     cell.alignment = Alignment(horizontal='right', vertical='center')
 
@@ -70,7 +83,7 @@ def process_invoice(file_bytes):
 
 # Streamlit 介面
 st.title("🚢 報單格式精確優化")
-st.write("已修正：12列標題置中、E7~I7合併置左換行。")
+st.write("已加入『安全合併』機制，解決開啟檔案時的修正提示。")
 
 uploaded_file = st.file_uploader("請上傳原始報單 Excel", type=["xlsx"])
 
